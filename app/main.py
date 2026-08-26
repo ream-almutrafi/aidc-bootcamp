@@ -71,11 +71,14 @@ def chat_completions(req: ChatCompletionRequest):
     """Run the model over the messages and return completions (or stream chunks)."""
     # 1. Build the prompt with the chat template
     messages_dict = [m.model_dump() for m in req.messages]
-    input_ids = tokenizer.apply_chat_template(
+    model_inputs = tokenizer.apply_chat_template(
         messages_dict,
         add_generation_prompt=True,
-        return_tensors="pt"
+        return_tensors="pt",
+        return_dict=True  # Returns a dict with both input_ids and attention_mask
     )
+    input_ids = model_inputs["input_ids"]
+    attention_mask = model_inputs["attention_mask"]
     prompt_tokens = input_ids.shape[1]
 
     # --- STREAMING PATH ---
@@ -83,6 +86,7 @@ def chat_completions(req: ChatCompletionRequest):
         streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
         gen_kwargs = {
             "input_ids": input_ids,
+            "attention_mask": attention_mask,  # <-- ADD THIS LINE
             "streamer": streamer,
             "max_new_tokens": req.max_tokens if req.max_tokens is not None else 128,
             "pad_token_id": tokenizer.eos_token_id,
@@ -148,6 +152,8 @@ def chat_completions(req: ChatCompletionRequest):
 
     # --- NON-STREAMING PATH ---
     gen_kwargs = {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
         "max_new_tokens": req.max_tokens if req.max_tokens is not None else 128,
         "pad_token_id": tokenizer.eos_token_id,
     }
@@ -158,7 +164,7 @@ def chat_completions(req: ChatCompletionRequest):
         gen_kwargs["do_sample"] = False
 
     with torch.no_grad():
-        out = model.generate(input_ids, **gen_kwargs)
+        out = model.generate(**gen_kwargs)
 
     new_tokens = out[0][prompt_tokens:]
     completion_tokens = len(new_tokens)
