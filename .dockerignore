@@ -1,0 +1,16 @@
+.venv/
+.hf_cache/
+.uv_cache/
+.tmp/
+.pip_cache/
+app/.venv/
+app/.hf_cache/
+app/.uv_cache/
+app/.tmp/
+app/.pip_cache/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+*.md
+results.json
