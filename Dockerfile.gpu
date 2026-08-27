@@ -1,0 +1,29 @@
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3.11 python3-pip python3.11-venv && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/bin/python3.11 /usr/local/bin/python && \
+    ln -sf /usr/bin/python3.11 /usr/local/bin/python3
+
+# Non-root user and cache permissions
+RUN useradd --create-home app && \
+    mkdir -p /home/app/.cache/huggingface && \
+    chown -R app:app /home/app
+
+ENV HF_HOME=/home/app/.cache/huggingface
+
+WORKDIR /app
+
+COPY app/requirements.txt .
+RUN pip3 install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/cpu \
+      --extra-index-url https://pypi.org/simple \
+      -r requirements.txt
+
+COPY app/ .
+
+USER app
+
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

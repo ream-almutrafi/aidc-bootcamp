@@ -1,0 +1,5 @@
+{
+  "cuda": true,
+  "device_name": "Tesla T4",
+  "tokens_per_second": 26.88
+}
