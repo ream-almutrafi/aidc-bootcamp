@@ -11,7 +11,7 @@ import time
 import uuid
 
 import torch
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
@@ -27,6 +27,8 @@ from schemas import (
 )
 
 MODEL_ID = os.environ.get("MODEL_ID", "Qwen/Qwen2.5-0.5B-Instruct")
+API_KEY = os.environ.get("API_KEY", "")
+MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "256"))
 
 app = FastAPI(title="serving-stack", version="wk2")
 
@@ -67,8 +69,14 @@ def list_models() -> ModelList:
 # POST /v1/chat/completions (Non-Streaming + Streaming)
 # ---------------------------------------------------------------------------
 @app.post("/v1/chat/completions")
-def chat_completions(req: ChatCompletionRequest):
-    """Run the model over the messages and return completions (or stream chunks)."""
+def chat_completions(
+    req: ChatCompletionRequest,
+    authorization: str | None = Header(default=None),
+):
+    if API_KEY:
+        expected = f"Bearer {API_KEY}"
+        if authorization != expected:
+            raise HTTPException(status_code=401, detail="Invalid API key")
     # 1. Build the prompt with the chat template
     messages_dict = [m.model_dump() for m in req.messages]
     model_inputs = tokenizer.apply_chat_template(
@@ -88,7 +96,7 @@ def chat_completions(req: ChatCompletionRequest):
             "input_ids": input_ids,
             "attention_mask": attention_mask,  # <-- ADD THIS LINE
             "streamer": streamer,
-            "max_new_tokens": req.max_tokens if req.max_tokens is not None else 128,
+            "max_new_tokens": min(req.max_tokens if req.max_tokens is not None else 128, MAX_TOKENS),
             "pad_token_id": tokenizer.eos_token_id,
         }
         if req.temperature and req.temperature > 0:
@@ -154,7 +162,7 @@ def chat_completions(req: ChatCompletionRequest):
     gen_kwargs = {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
-        "max_new_tokens": req.max_tokens if req.max_tokens is not None else 128,
+        "max_new_tokens": min(req.max_tokens if req.max_tokens is not None else 128, MAX_TOKENS),
         "pad_token_id": tokenizer.eos_token_id,
     }
     if req.temperature and req.temperature > 0:
@@ -170,7 +178,8 @@ def chat_completions(req: ChatCompletionRequest):
     completion_tokens = len(new_tokens)
     text = tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-    finish_reason = "length" if (req.max_tokens is not None and completion_tokens >= req.max_tokens) else "stop"
+    effective_max_tokens = min(req.max_tokens if req.max_tokens is not None else 128, MAX_TOKENS)
+    finish_reason = "length" if completion_tokens >= effective_max_tokens else "stop"
 
     choice = Choice(
         index=0,

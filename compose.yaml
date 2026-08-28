@@ -6,6 +6,8 @@ services:
     environment:
       MODEL_ID: ${MODEL_ID}
       HF_TOKEN: ${HF_TOKEN:-}
+      API_KEY: ${API_KEY}
+      MAX_TOKENS: ${MAX_TOKENS}
     healthcheck:
       test:
         - CMD
